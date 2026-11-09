@@ -735,17 +735,20 @@ async function loadQuotas() {
 async function toggleAdminUser(id, currentRole) {
   const newRole = currentRole === 'admin' ? 'student' : 'admin';
   if (!confirm(`Make @user a ${newRole}?`)) return;
-  try { await apiPatch('/rest/v1/profiles?id=eq.' + id, { role: newRole }); loadUsers(); loadDashboard(); showToast('Role updated ✓'); } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+  try { await apiPatch('/rest/v1/profiles?id=eq.' + id, { role: newRole }); loadUsers(); loadDashboard(); showToast('Role updated ✓'); }
+  catch (e) { showToast(/role|permission|policy|admin/i.test(e.message) ? 'Run admin_fix.sql in Supabase once to allow admin role changes.' : 'Failed: ' + e.message, 'error'); }
 }
 async function toggleSuspendUser(id, suspended) {
   const action = suspended ? 'unsuspend' : 'suspend';
   if (!confirm(`${action} this user?`)) return;
-  try { await apiPatch('/rest/v1/profiles?id=eq.' + id, { suspended: !suspended }); loadUsers(); loadDashboard(); showToast(`User ${action}ed ✓`); } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+  try { await apiPatch('/rest/v1/profiles?id=eq.' + id, { suspended: !suspended }); loadUsers(); loadDashboard(); showToast(`User ${action}ed ✓`); }
+  catch (e) { showToast(/suspended|column|schema|permission|policy/i.test(e.message) ? 'Run admin_fix.sql in Supabase once to enable suspension.' : 'Failed: ' + e.message, 'error'); }
 }
 async function deleteUser(id, username) {
   if (!confirm(`Delete @${username}? This cannot be undone.`)) return;
   if (!confirm('Type DELETE to confirm:')) return; // double confirm simplified
-  try { await apiDelete('/rest/v1/profiles?id=eq.' + id); loadUsers(); loadDashboard(); showToast('User deleted ✓'); } catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
+  try { await apiDelete('/rest/v1/profiles?id=eq.' + id); loadUsers(); loadDashboard(); showToast('User deleted ✓'); }
+  catch (e) { showToast(/permission|policy/i.test(e.message) ? 'Run admin_fix.sql in Supabase once to allow admin deletes.' : 'Delete failed: ' + e.message, 'error'); }
 }
 async function resolveReport(id, status) {
   try { await apiPatch('/rest/v1/reports?id=eq.' + id, { status }); loadReports(); loadDashboard(); showToast(`Report ${status} ✓`); } catch (e) { showToast('Failed: ' + e.message, 'error'); }

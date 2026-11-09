@@ -4,6 +4,7 @@
   "description": "StudyNest Admin Dashboard - private admin portal",
   "private": true,
   "scripts": {
+    "build": "node build.js",
     "dev": "npx http-server -p 8000 -c-1",
     "start": "npx http-server -p 8000 -c-1"
   },
