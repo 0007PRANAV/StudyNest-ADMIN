@@ -164,6 +164,7 @@
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .lock-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #8b949e; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; }
     .table-wrap th { position: sticky; top: 0; z-index: 1; }
+    .nav-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 0.68rem; font-weight: 800; vertical-align: middle; }
 
     /* Password field with show/hide */
     .pass-wrap { position: relative; }
@@ -207,6 +208,8 @@
     <div class="sidebar-nav">
       <div class="nav-item active" onclick="showPage('pageDashboard', this)">📊 Dashboard</div>
       <div class="nav-item" onclick="showPage('pageUsers', this)">👥 Users</div>
+      <div class="nav-item" onclick="showPage('pageVideos', this)">🎬 Video Approvals <span id="videoPendingDot" class="nav-dot" style="display:none;"></span></div>
+      <div class="nav-item" onclick="showPage('pageLibrary', this)">📚 Library</div>
       <div class="nav-item" onclick="showPage('pageReports', this)">🚨 Reports</div>
       <div class="nav-item" onclick="showPage('pageAnnouncements', this)">📢 Announcements</div>
       <div class="nav-item" onclick="showPage('pageBlocked', this)">🚫 Blocked</div>
@@ -404,6 +407,59 @@
       </div>
     </div>
 
+    <!-- Video Approvals -->
+    <div class="page" id="pageVideos">
+      <div class="header">
+        <div class="header-title">🎬 Video Approvals <span class="admin-badge">MODERATION</span></div>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="loadVideos()">Refresh</button>
+        </div>
+      </div>
+      <div class="card" style="border-color:#9e6a03;">
+        <div style="font-size:0.85rem;color:#8b949e;line-height:1.6;">
+          Every student upload stays invisible until you approve it. Students see <b style="color:#f59e0b;">⏳ Waiting for Admin's Approval</b> in the meantime. Approving publishes the video and sends an in-app notification plus an email (if SMTP/Resend is configured).
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:16px;">
+        <table>
+          <thead>
+            <tr><th>Title</th><th>Student</th><th>Category</th><th>Link</th><th>Status</th><th>Submitted</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="videosTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Library -->
+    <div class="page" id="pageLibrary">
+      <div class="header">
+        <div class="header-title">📚 Library Books</div>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="loadLibrary()">Refresh</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Add a book to the shared library</div>
+        <div class="form-row">
+          <div><label>Title</label><input type="text" id="libTitle" placeholder="Book title"></div>
+          <div><label>Author</label><input type="text" id="libAuthor" placeholder="Author"></div>
+        </div>
+        <div class="form-row">
+          <div><label>Category</label><input type="text" id="libCategory" placeholder="Science, Fiction, Exam prep…"></div>
+          <div><label>Emoji</label><input type="text" id="libEmoji" placeholder="📘" maxlength="4"></div>
+        </div>
+        <div class="mb-16"><label>Link (https://…)</label><input type="text" id="libUrl" placeholder="https://…"></div>
+        <div class="mb-16"><label>Description</label><input type="text" id="libDesc" placeholder="One line about the book"></div>
+        <button class="btn btn-primary" onclick="addLibraryBook()">Add book</button>
+      </div>
+      <div class="table-wrap" style="margin-top:16px;">
+        <table>
+          <thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Link</th><th>Actions</th></tr></thead>
+          <tbody id="libraryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Settings -->
     <div class="page" id="pageSettings">
       <div class="header">
@@ -531,12 +587,14 @@ async function apiGet(path, auth = true) {
 async function apiPost(path, body, auth = true) {
   const r = await fetch(SUPABASE_URL + path, { method: 'POST', headers: headers(auth), body: JSON.stringify(body) });
   if (!r.ok) throw new Error('API ' + r.status + ' ' + await r.text());
-  return r.json();
+  const t = await r.text();
+  try { return t ? JSON.parse(t) : null; } catch (e) { return t; }
 }
 async function apiPatch(path, body, auth = true) {
   const r = await fetch(SUPABASE_URL + path, { method: 'PATCH', headers: headers(auth), body: JSON.stringify(body) });
   if (!r.ok) throw new Error('API ' + r.status + ' ' + await r.text());
-  return r.json();
+  const t = await r.text();
+  try { return t ? JSON.parse(t) : null; } catch (e) { return t; }
 }
 async function apiDelete(path, auth = true) {
   const r = await fetch(SUPABASE_URL + path, { method: 'DELETE', headers: headers(auth) });
@@ -652,6 +710,8 @@ function showPage(id, btn) {
   if (window.matchMedia('(max-width: 900px)').matches) toggleNav(false);
   if (id === 'pageDashboard') loadDashboard();
   if (id === 'pageUsers') loadUsers();
+  if (id === 'pageVideos') loadVideos();
+  if (id === 'pageLibrary') loadLibrary();
   if (id === 'pageReports') loadReports();
   if (id === 'pageAnnouncements') loadAnnouncements();
   if (id === 'pageBlocked') loadBlocked();
@@ -659,7 +719,7 @@ function showPage(id, btn) {
 }
 async function refreshData() { loadAll(); showToast('Refreshed ✓'); }
 async function loadAll() {
-  await Promise.all([loadUsers(), loadReports(), loadAnnouncements(), loadBlocked(), loadQuotas(), loadDashboard()]);
+  await Promise.all([loadUsers(), loadVideos(), loadLibrary(), loadReports(), loadAnnouncements(), loadBlocked(), loadQuotas(), loadDashboard()]);
 }
 
 // ===== DASHBOARD =====
@@ -708,6 +768,126 @@ async function loadDashboard() {
         </tr>`).join('') + `</tbody></table>`;
     } else usrBody.innerHTML = '<div class="empty"><div class="empty-icon">👤</div><p>No users yet.</p></div>';
   } catch (e) { showToast('Dashboard load failed: ' + e.message, 'error'); }
+}
+
+// ===== VIDEO MODERATION =====
+let videoCache = [];
+async function loadVideos() {
+  const body = document.getElementById('videosTableBody');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  try {
+    const rows = await apiGet('/rest/v1/video_submissions?select=*&order=created_at.desc&limit=300');
+    videoCache = rows;
+    const pending = rows.filter(r => r.status === 'pending').length;
+    const dot = document.getElementById('videoPendingDot');
+    if (dot) { dot.textContent = pending; dot.style.display = pending ? 'inline-flex' : 'none'; }
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">No submissions yet.</td></tr>'; return; }
+    body.innerHTML = rows.map(v => {
+      const link = v.url ? `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">Open</a>` : '-';
+      const cls = v.status === 'approved' ? 'active' : v.status === 'pending' ? 'pending' : 'suspended';
+      const status = `<span class="badge badge-${cls}">${escapeHtml(v.status)}</span>`;
+      const actions = v.status === 'pending'
+        ? `<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="approveVideo('${v.id}')">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="declineVideo('${v.id}')">❌ Decline</button></div>`
+        : `<div class="btn-group"><button class="btn btn-ghost btn-sm" onclick="setVideoStatus('${v.id}','${v.status === 'approved' ? 'declined' : 'approved'}')">${v.status === 'approved' ? 'Unpublish' : '✅ Approve'}</button><button class="btn btn-danger btn-sm" onclick="deleteVideo('${v.id}')">🗑 Delete</button></div>`;
+      return `<tr>
+        <td>${escapeHtml(v.title || 'Untitled')}<div class="user-meta">${escapeHtml(aiClip(v.description || '', 90))}</div></td>
+        <td>@${escapeHtml(v.username || 'student')}<div class="user-meta">${escapeHtml(v.email || 'no email')}</div></td>
+        <td>${escapeHtml(v.category || '-')}</td>
+        <td>${link}</td>
+        <td>${status}${v.admin_note ? `<div class="user-meta">${escapeHtml(v.admin_note)}</div>` : ''}</td>
+        <td>${v.created_at ? new Date(v.created_at).toLocaleDateString() : '-'}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">Could not load submissions: ${escapeHtml(e.message)}<br><br>Run <b>StudyNest/supabase/migrations/20261111_library_videos_badges.sql</b> in the Supabase SQL editor first.</td></tr>`;
+  }
+}
+async function approveVideo(id) { return moderateVideoAdmin(id, 'approved', ''); }
+async function declineVideo(id) {
+  const note = prompt('Why is this video being declined? The student will see this.');
+  if (note === null) return;
+  return moderateVideoAdmin(id, 'declined', note);
+}
+async function setVideoStatus(id, status) { return moderateVideoAdmin(id, status, ''); }
+async function moderateVideoAdmin(id, status, note) {
+  const v = videoCache.find(x => x.id === id) || {};
+  try {
+    await apiPatch('/rest/v1/video_submissions?id=eq.' + encodeURIComponent(id), {
+      status, admin_note: note || '', reviewed_by: adminUser && adminUser.id, reviewed_at: new Date().toISOString()
+    });
+    if (v.user_id) {
+      try {
+        await apiPost('/rest/v1/notifications', {
+          user_id: v.user_id,
+          title: status === 'approved' ? '✅ Your video was approved' : '❌ Your video was declined',
+          body: status === 'approved'
+            ? `“${v.title || 'Your video'}” is now live in the StudyNest video library.`
+            : `“${v.title || 'Your video'}” was not approved.${note ? ' Reason: ' + note : ''}`,
+          kind: 'video',
+          link: 'videos'
+        });
+      } catch (e) { /* notification is best-effort */ }
+    }
+    showToast(status === 'approved' ? 'Video approved and published ✓' : 'Video declined.');
+    loadVideos();
+  } catch (e) { showToast('Could not update the video: ' + e.message, 'error'); }
+}
+async function deleteVideo(id) {
+  if (!confirm('Delete this submission permanently?')) return;
+  const v = videoCache.find(x => x.id === id) || {};
+  try {
+    await apiDelete('/rest/v1/video_submissions?id=eq.' + encodeURIComponent(id));
+    if (v.storage_path) {
+      fetch(SUPABASE_URL + '/storage/v1/object/videos/' + v.storage_path, { method: 'DELETE', headers: headers(true) }).catch(() => {});
+    }
+    showToast('Deleted.');
+    loadVideos();
+  } catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
+}
+
+// ===== LIBRARY =====
+async function loadLibrary() {
+  const body = document.getElementById('libraryTableBody');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
+  try {
+    const rows = await apiGet('/rest/v1/library_books?select=*&order=created_at.desc&limit=300');
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No custom books yet. The app also ships with a large built-in catalog.</td></tr>'; return; }
+    body.innerHTML = rows.map(b => `<tr>
+      <td>${escapeHtml(b.emoji || '📘')} ${escapeHtml(b.title)}</td>
+      <td>${escapeHtml(b.author || 'Unknown')}</td>
+      <td>${escapeHtml(b.category || 'General')}</td>
+      <td>${b.url ? `<a href="${escapeHtml(b.url)}" target="_blank" rel="noopener">Open</a>` : '-'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteLibraryBook('${b.id}')">🗑 Delete</button></td>
+    </tr>`).join('');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="empty">Could not load books: ${escapeHtml(e.message)}<br><br>Run the new SQL migration first.</td></tr>`;
+  }
+}
+async function addLibraryBook() {
+  const title = document.getElementById('libTitle').value.trim();
+  const author = document.getElementById('libAuthor').value.trim() || 'Unknown';
+  const category = document.getElementById('libCategory').value.trim() || 'General';
+  const emoji = document.getElementById('libEmoji').value.trim() || '📘';
+  const url = document.getElementById('libUrl').value.trim();
+  const description = document.getElementById('libDesc').value.trim();
+  if (!title || !/^https?:\/\//i.test(url)) { showToast('Add a title and a valid https link.', 'error'); return; }
+  try {
+    await apiPost('/rest/v1/library_books', { title, author, category, emoji, url, description, level: 'All levels', is_public: true, created_by: adminUser && adminUser.id });
+    showToast('Book added to the shared library ✓');
+    document.getElementById('libTitle').value = '';
+    document.getElementById('libAuthor').value = '';
+    document.getElementById('libUrl').value = '';
+    document.getElementById('libDesc').value = '';
+    loadLibrary();
+  } catch (e) { showToast('Could not add the book: ' + e.message, 'error'); }
+}
+async function deleteLibraryBook(id) {
+  if (!confirm('Remove this book from the shared library?')) return;
+  try { await apiDelete('/rest/v1/library_books?id=eq.' + encodeURIComponent(id)); showToast('Book removed.'); loadLibrary(); }
+  catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
 }
 
 // ===== USERS =====
