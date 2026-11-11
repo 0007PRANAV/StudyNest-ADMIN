@@ -53,15 +53,19 @@ Vercel settings:
 
 `vercel.json` already contains those settings and the SPA rewrite.
 
-### 4. Backup URL
+### 4. Live URL
 
-The same dashboard is also served by the main StudyNest deployment at:
+This is the **only** admin dashboard:
 
 ```
-https://study-nest-ashen.vercel.app/admin
+https://studynest-admin.vercel.app/
 ```
 
-That copy lives in the main repo as `admin.html`, so it keeps working even if the separate admin domain is pointed at a different Vercel project.
+The main app links to it directly from the profile page. `https://study-nest-ashen.vercel.app/admin`
+is now just a redirect to that URL, so old bookmarks keep working.
+
+> Do **not** use `https://study-nest-admin.vercel.app` (with a hyphen). That domain belongs to an
+> unrelated project, not StudyNest.
 
 ## Security
 
